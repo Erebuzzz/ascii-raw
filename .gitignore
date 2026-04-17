@@ -21,3 +21,6 @@ pnpm-debug.log*
 # local env files
 .env*.local
 .vercel
+
+# kiro
+.kiro/
