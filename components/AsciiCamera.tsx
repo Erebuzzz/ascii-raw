@@ -316,6 +316,7 @@ export function AsciiCamera() {
           </div>
           <div className="status" style={{ color: phase === "recording" ? 'var(--rec-red)' : fps < 10 ? 'var(--rec-red)' : 'inherit' }}>
             <Link href="/docs" style={{ color: 'inherit', textDecoration: 'none', borderRight: '1px dotted var(--border-dot)', paddingRight: '0.6rem', marginRight: '0.6rem' }}>[ DOCS ]</Link>
+            <a href="https://github.com/Erebuzzz/ascii-raw" target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none', borderRight: '1px dotted var(--border-dot)', paddingRight: '0.6rem', marginRight: '0.6rem' }}>[ GITHUB ]</a>
             FPS: {phase === "scanning" || phase === "recording" ? fps : 0} | 
             MOT: {motion.toFixed(1)}% | 
             STA: {phase === "idle" && "STANDBY"}

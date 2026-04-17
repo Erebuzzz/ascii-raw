@@ -65,6 +65,7 @@ export default function DocsPage() {
             <div>
               <p style={{ margin: '0 0 0.5rem 0', color: 'var(--accent)' }}><strong>CREATED BY</strong></p>
               <p style={{ margin: 0 }}>X (Twitter): <a href="https://x.com/erebuzzz" target="_blank" rel="noreferrer" style={{ color: 'var(--ink)' }}>x.com/erebuzzz</a></p>
+              <p style={{ margin: 0, marginTop: '0.2rem' }}>GitHub: <a href="https://github.com/Erebuzzz/ascii-raw" target="_blank" rel="noreferrer" style={{ color: 'var(--ink)' }}>github.com/Erebuzzz/ascii-raw</a></p>
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ margin: '0 0 0.5rem 0', color: 'var(--accent)' }}><strong>CONTACT</strong></p>
