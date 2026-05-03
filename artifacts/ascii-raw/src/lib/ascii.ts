@@ -1,5 +1,12 @@
 const BASE_CHARSET = " .,:;irsXA253hMHGS#9B&@";
 
+const EDGE_CHARS: Record<string, string> = {
+  horizontal: "-",
+  vertical: "|",
+  diag_fw: "/",
+  diag_bw: "\\",
+};
+
 export type AsciiOptions = {
   width: number;
   height: number;
@@ -10,6 +17,8 @@ export type AsciiOptions = {
   brightness?: number;
   contrast?: number;
   dithering?: boolean;
+  edgeDetection?: boolean;
+  edgeStrength?: number;
 };
 
 export type RenderOptions = AsciiOptions & {
@@ -30,6 +39,56 @@ function getCharset(density: number, customCharset?: string): string {
   return BASE_CHARSET.slice(0, size);
 }
 
+function computeSobelGray(
+  pixels: Uint8ClampedArray,
+  colorLUT: Uint8Array,
+  width: number,
+  height: number
+): Float32Array {
+  const gray = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const pi = i * 4;
+    const r = colorLUT[pixels[pi]];
+    const g = colorLUT[pixels[pi + 1]];
+    const b = colorLUT[pixels[pi + 2]];
+    gray[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  return gray;
+}
+
+function sobelAt(
+  gray: Float32Array,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { mag: number; angle: number } {
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const g = (dx: number, dy: number) =>
+    gray[clamp(y + dy, 0, height - 1) * width + clamp(x + dx, 0, width - 1)];
+
+  const gx =
+    -g(-1, -1) + g(1, -1) +
+    -2 * g(-1, 0) + 2 * g(1, 0) +
+    -g(-1, 1) + g(1, 1);
+
+  const gy =
+    -g(-1, -1) - 2 * g(0, -1) - g(1, -1) +
+    g(-1, 1) + 2 * g(0, 1) + g(1, 1);
+
+  const mag = Math.sqrt(gx * gx + gy * gy);
+  const angle = Math.atan2(gy, gx);
+  return { mag, angle };
+}
+
+function getEdgeChar(angle: number): string {
+  const deg = ((angle * 180) / Math.PI + 180) % 180;
+  if (deg < 22.5 || deg >= 157.5) return EDGE_CHARS.horizontal;
+  if (deg >= 22.5 && deg < 67.5) return EDGE_CHARS.diag_fw;
+  if (deg >= 67.5 && deg < 112.5) return EDGE_CHARS.vertical;
+  return EDGE_CHARS.diag_bw;
+}
+
 export function renderAsciiToCanvas(
   data: Uint8ClampedArray,
   options: RenderOptions
@@ -39,7 +98,8 @@ export function renderAsciiToCanvas(
     customCharset, colorMode = "monochrome",
     fgContext, bgContext, cellSize = 10, themeColor = "#2cff85",
     brightness = 100, contrast = 100, dithering = false,
-    letterSpacing = 1, lineHeight = 1
+    letterSpacing = 1, lineHeight = 1,
+    edgeDetection = false, edgeStrength = 50,
   } = options;
 
   const charset = getCharset(density, customCharset);
@@ -49,8 +109,10 @@ export function renderAsciiToCanvas(
   const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
   const brightnessOffset = (brightness - 100) * 2.55;
 
-  fgContext.clearRect(0, 0, width * cellSize * letterSpacing * 2, height * cellSize * lineHeight * 2);
-  bgContext.clearRect(0, 0, width * cellSize * letterSpacing * 2, height * cellSize * lineHeight * 2);
+  const canvasW = width * cellSize * letterSpacing * 2;
+  const canvasH = height * cellSize * lineHeight * 2;
+  fgContext.clearRect(0, 0, canvasW, canvasH);
+  bgContext.clearRect(0, 0, canvasW, canvasH);
 
   fgContext.font = `${cellSize}px "Fira Code", monospace`;
   fgContext.textBaseline = "top";
@@ -79,6 +141,12 @@ export function renderAsciiToCanvas(
     colorLUT[i] = Math.max(0, Math.min(255, c));
   }
 
+  const edgeThreshold = (edgeStrength / 100) * 200 + 20;
+  let grayMap: Float32Array | null = null;
+  if (edgeDetection) {
+    grayMap = computeSobelGray(pixels, colorLUT, width, height);
+  }
+
   const textRows: string[] = [];
 
   for (let y = 0; y < height; y += 1) {
@@ -94,18 +162,39 @@ export function renderAsciiToCanvas(
       const rawLuma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
       const luma = lumaLUT[rawLuma];
 
-      let finalLuma = luma;
-      if (bayer) {
-        const threshold = bayer[y % 4][x % 4];
-        finalLuma = luma < threshold ? 0 : 1;
+      let char: string;
+      let isEdge = false;
+
+      if (edgeDetection && grayMap) {
+        const { mag, angle } = sobelAt(grayMap, x, y, width, height);
+        if (mag > edgeThreshold) {
+          char = getEdgeChar(angle);
+          isEdge = true;
+        } else {
+          let finalLuma = luma;
+          if (bayer) {
+            const threshold = bayer[y % 4][x % 4];
+            finalLuma = luma < threshold ? 0 : 1;
+          }
+          const idx = Math.max(0, Math.min(lastIndex, Math.round(finalLuma * lastIndex)));
+          char = charset[lastIndex - idx];
+        }
+      } else {
+        let finalLuma = luma;
+        if (bayer) {
+          const threshold = bayer[y % 4][x % 4];
+          finalLuma = luma < threshold ? 0 : 1;
+        }
+        const idx = Math.max(0, Math.min(lastIndex, Math.round(finalLuma * lastIndex)));
+        char = charset[lastIndex - idx];
       }
 
-      const idx = Math.max(0, Math.min(lastIndex, Math.round(finalLuma * lastIndex)));
-      const char = charset[lastIndex - idx];
       currentRow += char;
 
       if (char !== " ") {
-        if (colorMode === "true-rgb") {
+        if (edgeDetection && isEdge) {
+          fgContext.fillStyle = themeColor;
+        } else if (colorMode === "true-rgb") {
           fgContext.fillStyle = `rgb(${r}, ${g}, ${b})`;
         } else if (colorMode === "rgb-snapped") {
           const snapR = r > 127 ? 255 : 0;
