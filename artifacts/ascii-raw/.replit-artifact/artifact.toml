@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "ASCII.RAW // CAM_01"
+version = "1.0.0"
+id = "artifacts/ascii-raw"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20595
+
+[services.development]
+run = "pnpm --filter @workspace/ascii-raw run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ascii-raw", "run", "build" ]
+publicDir = "artifacts/ascii-raw/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20595"
+BASE_PATH = "/"
